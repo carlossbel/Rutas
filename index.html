@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rutas Bloobit</title>
+  <meta name="description" content="Planeador de rutas de entrega: registra empresas, verifica su ubicación y calcula el orden más rápido por calles reales.">
+  <meta name="theme-color" content="#050B18">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231D4ED8'/%3E%3Cpath d='M9 23c4-10 10-4 14-14' stroke='%23BFDBFE' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='9' cy='23' r='3' fill='%23fff'/%3E%3Ccircle cx='23' cy='9' r='3' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <header class="topbar glass">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M8 24c4-11 11-4 16-16" /><circle cx="8" cy="24" r="3" /><circle cx="24" cy="8" r="3" /></svg>
+      </span>
+      <div>
+        <div class="brand-name">Rutas</div>
+        <div class="brand-sub">Planeación de entregas · Bloobit</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="svc" id="svcStatus" title="Estado del servicio de rutas">Servicio de rutas: sin probar</span>
+      <button class="btn ghost sm" id="btnExport" type="button">Exportar</button>
+      <label class="btn ghost sm" for="importFile">Importar</label>
+      <input id="importFile" type="file" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="panel glass">
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-tab="ruta" aria-selected="true" id="tab-ruta">Ruta del día</button>
+        <button role="tab" class="tab" data-tab="empresas" aria-selected="false" id="tab-empresas">Empresas <span class="count" id="countEmp">0</span></button>
+        <button role="tab" class="tab" data-tab="registro" aria-selected="false" id="tab-registro">Registrar</button>
+      </nav>
+
+      <!-- RUTA -->
+      <section class="view" id="view-ruta" role="tabpanel" aria-labelledby="tab-ruta">
+        <div class="field-grid">
+          <label class="field" for="startTime">Hora de salida
+            <input type="time" id="startTime" value="09:00">
+          </label>
+          <label class="field" for="serviceMin">Minutos por entrega
+            <input type="number" id="serviceMin" value="15" min="0" max="240" step="5">
+          </label>
+        </div>
+        <label class="switch" for="returnOffice">
+          <input type="checkbox" id="returnOffice" checked>
+          <span>Regresar a la oficina al terminar</span>
+        </label>
+
+        <div class="block">
+          <div class="block-head">
+            <h3>Entregas de hoy</h3>
+            <div class="mini-actions">
+              <button class="link" type="button" id="selAll">Todas</button>
+              <button class="link" type="button" id="selNone">Ninguna</button>
+            </div>
+          </div>
+          <ul class="pick" id="pickList"></ul>
+        </div>
+
+        <button class="btn primary wide" id="btnRoute" type="button">Calcular mejor ruta</button>
+        <p class="msg" id="routeMsg" hidden></p>
+
+        <div id="routeResult" hidden>
+          <div class="first-stop" id="firstStop"></div>
+          <div class="kpis">
+            <div><span>Paradas</span><b id="kStops">–</b></div>
+            <div><span>Manejo</span><b id="kDrive">–</b></div>
+            <div><span>Distancia</span><b id="kDist">–</b></div>
+            <div><span>Termina</span><b id="kEnd">–</b></div>
+          </div>
+          <ol class="itinerary" id="itinerary"></ol>
+          <div class="nav-links" id="navLinks"></div>
+          <p class="fine" id="routeNote"></p>
+        </div>
+      </section>
+
+      <!-- EMPRESAS -->
+      <section class="view" id="view-empresas" role="tabpanel" aria-labelledby="tab-empresas" hidden>
+        <label class="field" for="filter">Buscar empresa
+          <input type="search" id="filter" placeholder="Nombre, dirección o contacto" autocomplete="off">
+        </label>
+        <ul class="companies" id="companyList"></ul>
+      </section>
+
+      <!-- REGISTRO -->
+      <section class="view" id="view-registro" role="tabpanel" aria-labelledby="tab-registro" hidden>
+        <h3 id="regTitle">Registrar empresa</h3>
+        <ol class="steps">
+          <li><b>Busca</b> por dirección o nombre, o pega coordenadas / link largo de Google Maps.</li>
+          <li><b>Ajusta el pin</b> arrastrándolo hasta la entrada o el acceso de carga.</li>
+          <li><b>Revisa la verificación</b> y confirma antes de guardar.</li>
+        </ol>
+
+        <div class="search-row">
+          <label class="field grow" for="geoQuery">Dirección, nombre o coordenadas
+            <input type="text" id="geoQuery" placeholder="Av. 5 de Febrero 1303, Querétaro" autocomplete="off">
+          </label>
+          <button class="btn primary" type="button" id="btnGeo">Buscar</button>
+        </div>
+        <p class="fine">También puedes hacer clic directamente en el mapa para colocar el pin.</p>
+        <ul class="results" id="geoResults"></ul>
+
+        <div class="verify" id="verifyBox" hidden>
+          <div class="verify-head">
+            <span class="chip" id="vChip">Verificando…</span>
+            <span class="mono" id="vCoords"></span>
+          </div>
+          <dl>
+            <dt>Dirección del pin</dt><dd id="vAddr">–</dd>
+            <dt>Calle más cercana</dt><dd id="vRoad">–</dd>
+          </dl>
+          <p class="fine" id="vAdvice"></p>
+        </div>
+
+        <form id="regForm" class="form" novalidate>
+          <label class="field" for="fName">Nombre de la empresa *
+            <input type="text" id="fName" required autocomplete="organization">
+          </label>
+          <label class="field" for="fAddr">Dirección
+            <input type="text" id="fAddr" autocomplete="off">
+          </label>
+          <div class="field-grid">
+            <label class="field" for="fContact">Contacto
+              <input type="text" id="fContact" autocomplete="off">
+            </label>
+            <label class="field" for="fPhone">Teléfono
+              <input type="tel" id="fPhone" autocomplete="off">
+            </label>
+          </div>
+          <label class="field" for="fNotes">Notas de entrega
+            <input type="text" id="fNotes" placeholder="Horario de recepción, caseta, andén…" autocomplete="off">
+          </label>
+          <label class="switch" for="fOffice">
+            <input type="checkbox" id="fOffice">
+            <span>Esta es la oficina (punto de salida)</span>
+          </label>
+          <label class="switch confirm" for="fConfirm">
+            <input type="checkbox" id="fConfirm">
+            <span>Revisé el pin en el mapa y está en el acceso correcto</span>
+          </label>
+          <p class="msg" id="regMsg" hidden></p>
+          <div class="row">
+            <button class="btn primary" type="submit" id="btnSave">Guardar empresa</button>
+            <button class="btn ghost" type="button" id="btnCancel">Limpiar</button>
+          </div>
+        </form>
+      </section>
+    </aside>
+
+    <main class="map-wrap glass">
+      <div id="map" aria-label="Mapa"></div>
+      <div class="map-legend">
+        <span><i class="lg office"></i>Oficina</span>
+        <span><i class="lg stop"></i>Parada</span>
+        <span><i class="lg idle"></i>Sin seleccionar</span>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="solver.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
