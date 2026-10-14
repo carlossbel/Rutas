@@ -16,7 +16,7 @@ Planeador de rutas de entrega para Bloobit. Registra empresas con su ubicación 
 | Archivo | Para qué |
 |---|---|
 | `index.html` | Estructura de la página |
-| `styles.css` | Tema oscuro azul con paneles de vidrio |
+| `styles.css` | Tema oscuro azul, sobrio y minimalista |
 | `app.js` | Mapa, registro, verificación y cálculo de ruta |
 | `solver.js` | Optimizador del orden de paradas |
 | `empresas.json` | Lista base que se carga si el navegador no tiene datos |

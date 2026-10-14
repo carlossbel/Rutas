@@ -11,6 +11,7 @@
   const NOMINATIM = "https://nominatim.openstreetmap.org";
   const QRO_VIEWBOX = "-100.70,20.90,-100.10,20.35"; // prioriza resultados en la zona de Querétaro
   const LS_KEY = "rutas-bloobit-v1";
+  const OFFICE_DEFAULT = { name: "Oficina Bloobit", address: "C. del Puente de Alvarado 303, Carretas, 76050 Santiago de Querétaro, Qro." };
 
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -246,8 +247,8 @@
       const w = near.value.waypoints[0];
       v.roadDist = w.distance; v.roadName = w.name || "calle sin nombre";
       $("#vRoad").textContent = v.roadName + " · a " + Math.round(w.distance) + " m del pin";
-      setSvc(true, "Servicio de rutas: en línea");
-    } else { $("#vRoad").textContent = "No se pudo consultar el servicio de rutas."; setSvc(false, "Servicio de rutas: sin respuesta"); }
+      setSvc(true, "Rutas en línea");
+    } else { $("#vRoad").textContent = "No se pudo consultar el servicio de rutas."; setSvc(false, "Rutas sin respuesta"); }
 
     if (v.roadDist == null) { chip.className = "chip warn"; chip.textContent = "Verificación incompleta"; $("#vAdvice").textContent = "Puedes guardar, pero vuelve a verificarla después."; }
     else if (v.roadDist <= 60) { chip.className = "chip ok"; chip.textContent = "Ubicación correcta"; $("#vAdvice").textContent = "El pin está junto a una calle transitable. Confirma que sea la entrada correcta."; }
@@ -378,6 +379,7 @@
     if (isOffice) state.selected = state.selected.filter((x) => x !== rec.id);
     save(); clearRoute(); clearEdit(true); renderAll();
     toast(isOffice ? "Oficina guardada." : "Empresa guardada.");
+    if (isOffice && state.places.length === 1) { showMsg($("#regMsg"), "Oficina lista. Ahora registra las empresas que visitas.", true); }
   });
 
   // ------------------------------------------------------------------ cálculo de ruta
@@ -417,10 +419,10 @@
         btn.disabled = false; btn.textContent = "Calcular mejor ruta";
         return showMsg(msg, "No hay camino por calle hacia: " + names + ". Revisa su pin en Empresas → Editar / verificar.");
       }
-      setSvc(true, "Servicio de rutas: en línea");
+      setSvc(true, "Rutas en línea");
     } catch (e) {
       // Respaldo: distancia en línea recta × 1.35 a 30 km/h
-      estimated = true; setSvc(false, "Servicio de rutas: sin respuesta");
+      estimated = true; setSvc(false, "Rutas sin respuesta");
       M = pts.map((a) => pts.map((b) => (haversine(a, b) * 1.35) / (30 / 3.6)));
       D = pts.map((a) => pts.map((b) => haversine(a, b) * 1.35));
     }
@@ -549,11 +551,32 @@
     $("#serviceMin").value = state.settings.service ?? 15;
     $("#returnOffice").checked = state.settings.ret !== false;
     renderAll(); fitAll();
-    if (!office()) { showTab("registro"); showMsg($("#regMsg"), "Empieza registrando la oficina: busca su dirección o pega sus coordenadas y marca «Esta es la oficina».", true); }
+    if (!office()) setupOffice();
     // Prueba rápida del servicio de rutas
     getJSON(OSRM + "/nearest/v1/driving/-100.3899,20.5888?number=1", 8000)
-      .then((r) => setSvc(r.code === "Ok", r.code === "Ok" ? "Servicio de rutas: en línea" : "Servicio de rutas: con fallas"))
-      .catch(() => setSvc(false, "Servicio de rutas: sin respuesta"));
+      .then((r) => setSvc(r.code === "Ok", r.code === "Ok" ? "Rutas en línea" : "Rutas con fallas"))
+      .catch(() => setSvc(false, "Rutas sin respuesta"));
   }
+  // Primer uso: localiza la dirección de la oficina y deja el registro listo para confirmar
+  async function setupOffice() {
+    showTab("registro");
+    $("#fName").value = OFFICE_DEFAULT.name;
+    $("#fAddr").value = OFFICE_DEFAULT.address;
+    $("#fOffice").checked = true;
+    $("#geoQuery").value = OFFICE_DEFAULT.address;
+    showMsg($("#regMsg"), "Localizando la oficina…", true);
+    try {
+      const res = await searchAddress(OFFICE_DEFAULT.address);
+      const best = res.find((r) => /alvarado/i.test(r.label)) || res[0];
+      if (best) {
+        setPin(best.lat, best.lng, true);
+        $("#fOffice").checked = true;
+        showMsg($("#regMsg"), best.precision === "exacta"
+          ? "Oficina localizada. Revisa que el pin esté en la entrada, marca la confirmación y guarda."
+          : "Se localizó la calle, pero no el número exacto. Arrastra el pin hasta la entrada de la oficina, marca la confirmación y guarda.", true);
+      } else showMsg($("#regMsg"), "No se encontró la dirección automáticamente. Haz clic en el mapa sobre la oficina o pega sus coordenadas.", true);
+    } catch (e) { showMsg($("#regMsg"), "No se pudo localizar la oficina (" + e.message + "). Haz clic en el mapa sobre la oficina o pega sus coordenadas.", true); }
+  }
+
   bootstrap();
 })();
