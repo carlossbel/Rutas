@@ -231,7 +231,7 @@ button:focus-visible, .btn:focus-visible, .tab:focus-visible, label.btn:focus-wi
 
 /* Mapa */
 .leaflet-container { font-family: var(--f-sans); background: var(--bg-0); }
-.leaflet-tile-pane { filter: sepia(0.35) hue-rotate(185deg) saturate(1.9) brightness(0.92) contrast(1.05); }
+.leaflet-tile-pane { filter: invert(1) hue-rotate(195deg) saturate(0.7) brightness(0.82) contrast(1.08); }
 .leaflet-control-zoom a { background: var(--glass-strong) !important; color: var(--text) !important; border-color: var(--edge) !important; backdrop-filter: var(--blur); }
 .leaflet-control-attribution { background: rgba(4, 10, 23, 0.7) !important; color: var(--faint) !important; }
 .leaflet-control-attribution a { color: var(--blue-hi) !important; }

@@ -23,9 +23,9 @@ Planeador de rutas de entrega para Bloobit. Registra empresas con su ubicación 
 
 ## Servicios que usa (gratuitos, sin llave)
 
-- Mapa: OpenStreetMap con estilo oscuro de CARTO.
+- Mapa: OpenStreetMap (el tono oscuro azul se aplica con CSS).
 - Tiempos y trazo de ruta: servidor público de OSRM (`router.project-osrm.org`).
-- Búsqueda de direcciones: Nominatim de OpenStreetMap (máximo 1 consulta por segundo; la app ya lo respeta).
+- Búsqueda de direcciones: Photon y Nominatim (OpenStreetMap). Se consultan los dos y se ordenan por precisión (número exacto, solo calle o zona).
 
 El servidor público de OSRM es de demostración: para uso diario ligero funciona bien, pero si algún día deja de responder la app calcula con distancias aproximadas y lo avisa.
 

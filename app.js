@@ -78,9 +78,10 @@
 
   // ------------------------------------------------------------------ mapa
   const map = L.map("map", { zoomControl: true, attributionControl: true }).setView([20.5888, -100.3899], 12);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 20, subdomains: "abcd",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Rutas: <a href="https://project-osrm.org">OSRM</a>'
+  // Mapa base de OpenStreetMap (sin llave); el tono oscuro azul se aplica con un filtro CSS
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Rutas: <a href="https://project-osrm.org">OSRM</a> · Búsqueda: Nominatim / Photon'
   }).addTo(map);
   const placesLayer = L.layerGroup().addTo(map);
   const routeLayer = L.layerGroup().addTo(map);
@@ -273,18 +274,82 @@
     }
     $("#btnGeo").disabled = true; $("#btnGeo").textContent = "Buscando…";
     try {
-      const res = await nominatim("/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=mx&accept-language=es&viewbox=" + QRO_VIEWBOX + "&q=" + encodeURIComponent(q));
-      if (!res.length) { ul.appendChild(el("p", "empty", "Sin resultados. Prueba con calle y número, colonia y ciudad, o coloca el pin con un clic en el mapa.")); return; }
-      for (const r of res) {
+      const results = await searchAddress(q);
+      if (!results.length) { ul.appendChild(el("p", "empty", "Sin resultados. Prueba solo con calle, número y ciudad (ej. «Puente de Alvarado 303, Querétaro»), o coloca el pin con un clic en el mapa.")); return; }
+      for (const r of results) {
         const li = el("li"), b = el("button"); b.type = "button";
-        b.appendChild(document.createTextNode(r.display_name));
-        b.appendChild(el("small", null, (+r.lat).toFixed(5) + ", " + (+r.lon).toFixed(5) + " · " + (r.type || r.category || "")));
-        b.onclick = () => { ul.textContent = ""; if (!$("#fAddr").value.trim()) $("#fAddr").value = shortAddress(r); setPin(+r.lat, +r.lon, true); };
+        b.appendChild(document.createTextNode(r.label));
+        const prec = r.precision === "exacta" ? "Número exacto" : r.precision === "calle" ? "Solo la calle: ajusta el pin al número" : "Zona aproximada: ajusta el pin";
+        b.appendChild(el("small", null, prec + " · " + r.lat.toFixed(5) + ", " + r.lng.toFixed(5) + " · " + r.source));
+        b.onclick = () => {
+          ul.textContent = ""; if (!$("#fAddr").value.trim()) $("#fAddr").value = r.short;
+          setPin(r.lat, r.lng, true);
+          if (r.precision !== "exacta") toast("Ubicación aproximada: arrastra el pin hasta la entrada exacta.");
+        };
         li.appendChild(b); ul.appendChild(li);
       }
     } catch (e) {
       ul.appendChild(el("p", "empty", "No se pudo buscar la dirección (" + e.message + "). Intenta de nuevo en unos segundos o pega las coordenadas."));
     } finally { $("#btnGeo").disabled = false; $("#btnGeo").textContent = "Buscar"; }
+  }
+
+  // Normaliza direcciones mexicanas: abreviaturas, código postal y estado
+  function cleanQuery(q) {
+    return q
+      .replace(/\bC\.?\s?P\.?\s*(?=\d)/gi, "").replace(/\bC\.\s*/gi, "Calle ").replace(/\bAv\.?\s+/gi, "Avenida ").replace(/\bBlvd\.?\s+/gi, "Boulevard ")
+      .replace(/\bProl\.?\s+/gi, "Prolongación ").replace(/\bCarr\.?\s+/gi, "Carretera ").replace(/\bCol\.?\s+/gi, "")
+      .replace(/\b\d{5}\b/g, "")
+      .replace(/\bQro\.?(?=\s|,|$)/gi, "Querétaro").replace(/\bSantiago de Querétaro\b/gi, "Querétaro")
+      .replace(/\s+,/g, ",").replace(/(,\s*)+/g, ", ").replace(/\s{2,}/g, " ").replace(/^[,\s]+|[,\s]+$/g, "");
+  }
+  // Calle y número sin colonia (Nominatim falla seguido con la colonia)
+  function streetOnly(clean) {
+    const parts = clean.split(",").map((s) => s.trim()).filter(Boolean);
+    const city = parts.find((p) => /quer[eé]taro|corregidora|marqu[eé]s|monterrey|san juan del r[ií]o/i.test(p)) || "Querétaro";
+    return parts[0] + ", " + city;
+  }
+
+  function fromNominatim(r) {
+    const a = r.address || {};
+    const precision = a.house_number ? "exacta" : (r.addresstype === "road" || r.category === "highway") ? "calle" : "zona";
+    return { lat: +r.lat, lng: +r.lon, label: r.display_name, short: shortAddress(r), precision, source: "OpenStreetMap" };
+  }
+  function fromPhoton(f) {
+    const p = f.properties || {}, c = f.geometry.coordinates;
+    const street = [p.street || (p.type === "street" ? p.name : null), p.housenumber].filter(Boolean).join(" ");
+    const parts = [p.type !== "street" && p.type !== "house" ? p.name : null, street, p.district || p.locality, p.city, p.state, p.postcode].filter(Boolean);
+    const precision = p.housenumber ? "exacta" : p.type === "street" ? "calle" : "zona";
+    return { lat: c[1], lng: c[0], label: [...new Set(parts)].join(", "), short: [street, p.district || p.locality, p.city].filter(Boolean).join(", ") || p.name, precision, source: "Photon" };
+  }
+
+  async function photon(q) {
+    const r = await getJSON("https://photon.komoot.io/api/?limit=6&bbox=-101.2,20.0,-99.6,21.7&lat=20.59&lon=-100.39&q=" + encodeURIComponent(q), 12000);
+    return (r.features || []).filter((f) => f.geometry && f.properties && f.properties.countrycode === "MX").map(fromPhoton);
+  }
+  async function nomSearch(q) {
+    const r = await nominatim("/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=mx&accept-language=es&viewbox=" + QRO_VIEWBOX + "&q=" + encodeURIComponent(q));
+    return r.map(fromNominatim);
+  }
+
+  // Busca en dos servicios y con varias versiones de la dirección; ordena por precisión
+  async function searchAddress(q) {
+    const clean = cleanQuery(q);
+    const tries = [() => photon(clean), () => nomSearch(clean)];
+    let out = [];
+    const settled = await Promise.allSettled(tries.map((f) => f()));
+    settled.forEach((s) => { if (s.status === "fulfilled") out.push(...s.value); });
+    if (!out.length) {
+      for (const f of [() => nomSearch(q), () => nomSearch(streetOnly(clean)), () => photon(streetOnly(clean))]) {
+        try { out.push(...(await f())); } catch (e) {}
+        if (out.length) break;
+      }
+    }
+    if (!out.length && settled.every((s) => s.status === "rejected")) throw new Error("servicios de búsqueda sin respuesta");
+    const rank = { exacta: 0, calle: 1, zona: 2 };
+    out.sort((a, b) => rank[a.precision] - rank[b.precision]);
+    const unique = [];
+    for (const r of out) if (!unique.some((u) => haversine(u, r) < 30)) unique.push(r);
+    return unique.slice(0, 6);
   }
   $("#btnGeo").onclick = geoSearch;
   $("#geoQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); geoSearch(); } });
