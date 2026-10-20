@@ -53,8 +53,8 @@ Para que cualquiera que abra la página ya tenga la lista: exporta el JSON, ren�
 ## Primer uso
 
 1. La oficina (Puente de Alvarado 303, 20.5933, -100.3726) ya viene precargada. Para moverla: Empresas → Oficina Bloobit → Editar / verificar.
-3. Registra cada empresa igual.
-4. En **Ruta del día** marca a quién vas hoy → **Calcular mejor ruta**.
+2. Registra cada empresa en **Registrar**: busca la dirección, revisa el pin, confirma y guarda.
+3. En **Ruta del día** marca a quién vas hoy → **Calcular mejor ruta**.
 
 > Los links cortos `maps.app.goo.gl` no traen coordenadas; ábrelos primero y copia los números o el link completo.
 
