@@ -2,7 +2,8 @@
  * Servicios gratuitos usados (sin llaves):
  *   - OSRM (router.project-osrm.org): tiempos de manejo reales por calles y trazo de la ruta.
  *   - Nominatim (OpenStreetMap): búsqueda de direcciones y dirección del pin.
- * Los datos de empresas se guardan en este navegador (localStorage) y se pueden exportar/importar en JSON.
+ * Los datos de empresas se guardan en este navegador (localStorage) y, si firebase-config.js está configurado,
+ * también en Firestore, sincronizados en vivo entre todos los usuarios.
  */
 (function () {
   "use strict";
@@ -21,7 +22,34 @@
   function load() {
     try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s && Array.isArray(s.places)) state = Object.assign(state, s); } catch (e) {}
   }
-  function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("No se pudo guardar en este navegador."); } }
+  function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("No se pudo guardar en este navegador."); } }
+  function save() { saveLocal(); pushCloud(); }
+
+  // ------------------------------------------------------------------ sincronización con Firebase (opcional)
+  const Cloud = window.RutasCloud;
+  let cloudLive = false;          // hay sesión y la colección ya se cargó
+  let synced = new Map();         // id -> huella del documento tal como está en la nube
+  const stable = (v) => Array.isArray(v) ? "[" + v.map(stable).join(",") + "]"
+    : v && typeof v === "object" ? "{" + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ":" + stable(v[k])).join(",") + "}"
+    : JSON.stringify(v === undefined ? null : v);
+  const fp = (p) => { const { id, ...rest } = p; return stable(rest); };
+  function pushCloud() {
+    if (!Cloud || !cloudLive) return;
+    const cur = new Map(state.places.map((p) => [p.id, fp(p)]));
+    const ups = [], dels = [];
+    for (const [id, k] of cur) if (synced.get(id) !== k) ups.push(byId(id));
+    for (const id of synced.keys()) if (!cur.has(id)) dels.push(id);
+    if (!ups.length && !dels.length) return;
+    const prev = synced; synced = cur;
+    setCloud("sync", "Guardando…");
+    Cloud.write(ups, dels)
+      .then(() => setCloud("ok", "Base de datos al día"))
+      .catch((e) => { synced = prev; setCloud("bad", "Sin guardar en la nube"); toast("No se guardó en la base de datos: " + Cloud.friendly(e)); });
+  }
+  function setCloud(kind, text) {
+    const n = document.getElementById("cloudStatus"); if (!n) return;
+    n.hidden = false; n.textContent = text; n.className = "svc " + (kind === "ok" ? "ok" : kind === "bad" ? "bad" : "");
+  }
   const office = () => state.places.find((p) => p.isOffice);
   const byId = (id) => state.places.find((p) => p.id === id);
   const uid = () => "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -459,9 +487,18 @@
 
     const ol = $("#itinerary"); ol.textContent = "";
     let t = start;
-    const row = (numCls, numTxt, name, sub, time, small) => {
+    const wazeUrl = (p) => "https://waze.com/ul?ll=" + p.lat + "," + p.lng + "&navigate=yes";
+    const gmapsUrl = (p) => "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + p.lat + "," + p.lng;
+    const row = (numCls, numTxt, name, sub, time, small, dest) => {
       const li = el("li"); li.append(el("div", "num " + numCls, numTxt));
-      const mid = el("div"); mid.append(el("div", "it-name", name)); if (sub) mid.append(el("div", "it-sub", sub)); li.append(mid);
+      const mid = el("div"); mid.append(el("div", "it-name", name)); if (sub) mid.append(el("div", "it-sub", sub));
+      if (dest) {
+        const links = el("div", "it-links");
+        const wz = el("a", "link", "Ir con Waze"); wz.href = wazeUrl(dest); wz.target = "_blank"; wz.rel = "noopener";
+        const gm = el("a", "link", "Google Maps"); gm.href = gmapsUrl(dest); gm.target = "_blank"; gm.rel = "noopener";
+        links.append(wz, gm); mid.append(links);
+      }
+      li.append(mid);
       const tm = el("div", "it-time", time); if (small) tm.append(el("small", null, small)); li.append(tm);
       ol.appendChild(li);
     };
@@ -469,9 +506,9 @@
     ordered.forEach((p, i) => {
       t += legs[i].duration / 60;
       const arrive = t; t += service;
-      row("", String(i + 1), p.name, [p.address, p.notes].filter(Boolean).join(" · "), fmtClock(arrive), "+" + fmtDur(legs[i].duration) + " · " + fmtKm(legs[i].distance));
+      row("", String(i + 1), p.name, [p.address, p.notes].filter(Boolean).join(" · "), fmtClock(arrive), "+" + fmtDur(legs[i].duration) + " · " + fmtKm(legs[i].distance), p);
     });
-    if (ret) { const l = legs[legs.length - 1]; t += l.duration / 60; row("office", "FIN", o.name, "Regreso", fmtClock(t), "+" + fmtDur(l.duration) + " · " + fmtKm(l.distance)); }
+    if (ret) { const l = legs[legs.length - 1]; t += l.duration / 60; row("office", "FIN", o.name, "Regreso", fmtClock(t), "+" + fmtDur(l.duration) + " · " + fmtKm(l.distance), o); }
 
     $("#kStops").textContent = ordered.length;
     $("#kDrive").textContent = fmtDur(driveS);
@@ -489,11 +526,12 @@
       const a = el("a", "btn primary", chunks.length > 1 ? "Abrir tramo " + (k + 1) + " de " + chunks.length + " en Google Maps" : "Abrir ruta en Google Maps");
       a.href = url; a.target = "_blank"; a.rel = "noopener"; nav.appendChild(a);
     });
-    const wz = el("a", "btn ghost", "Primera parada en Waze"); wz.href = "https://waze.com/ul?ll=" + ll(ordered[0]) + "&navigate=yes"; wz.target = "_blank"; wz.rel = "noopener"; nav.appendChild(wz);
+    const wz = el("a", "btn", "Iniciar en Waze · parada 1"); wz.href = wazeUrl(ordered[0]); wz.target = "_blank"; wz.rel = "noopener"; nav.appendChild(wz);
+    nav.appendChild(el("p", "fine", "Waze navega a un destino a la vez: sigue el orden de la lista y toca «Ir con Waze» en cada parada al terminar la anterior."));
 
     $("#routeNote").textContent = estimated
       ? "El servicio de rutas no respondió: el orden se calculó con distancias aproximadas. Vuelve a calcular en unos minutos para usar tiempos reales."
-      : "Orden calculado con tiempos de manejo reales por calles (OpenStreetMap). " + (ordered.length <= 12 ? "Es la combinación óptima." : "Optimizado por aproximación.") + " Google Maps ajustará según el tráfico del momento.";
+      : "Orden calculado con tiempos de manejo reales por calles (OpenStreetMap). " + (ordered.length <= 12 ? "Es la combinación óptima." : "Optimizado por aproximación.") + " Google Maps y Waze ajustan el camino de cada tramo según el tráfico del momento.";
     $("#routeResult").hidden = false;
 
     routeLayer.clearLayers();
@@ -551,12 +589,62 @@
     $("#serviceMin").value = state.settings.service ?? 15;
     $("#returnOffice").checked = state.settings.ret !== false;
     renderAll(); fitAll();
+    if (Cloud) await startCloud();
     if (!office()) setupOffice();
     // Prueba rápida del servicio de rutas
     getJSON(OSRM + "/nearest/v1/driving/-100.3899,20.5888?number=1", 8000)
       .then((r) => setSvc(r.code === "Ok", r.code === "Ok" ? "Rutas en línea" : "Rutas con fallas"))
       .catch(() => setSvc(false, "Rutas sin respuesta"));
   }
+  // Inicia Firebase, pide sesión y espera la primera carga de la colección
+  function startCloud() {
+    return new Promise(async (resolve) => {
+      setCloud("", "Conectando base de datos…");
+      try { await Cloud.init(); }
+      catch (e) { setCloud("bad", "Base de datos sin conexión"); toast("No se pudo conectar con Firebase; se usarán los datos de este navegador."); return resolve(); }
+      let unsub = null, resolved = false;
+      const done = () => { if (!resolved) { resolved = true; resolve(); } };
+      Cloud.onAuth((user) => {
+        if (unsub) { unsub(); unsub = null; }
+        cloudLive = false;
+        $("#userBox").hidden = !user;
+        if (!user) { $("#login").hidden = false; setCloud("", "Sin sesión"); return; }
+        $("#login").hidden = true; $("#userEmail").textContent = user.email || "";
+        unsub = Cloud.subscribe((places, first) => {
+          if (first && !places.length && state.places.length) {
+            // Base de datos vacía: sube lo que ya había en este navegador
+            cloudLive = true; synced = new Map(); pushCloud(); toast("Empresas de este navegador subidas a la base de datos.");
+          } else {
+            state.places = places;
+            synced = new Map(places.map((p) => [p.id, fp(p)]));
+            const ids = new Set(places.map((p) => p.id));
+            state.selected = state.selected.filter((id) => ids.has(id));
+            cloudLive = true; saveLocal();
+            if (lastRoute && lastRoute.order.some((id) => !ids.has(id))) clearRoute();
+            renderAll(); if (first) fitAll();
+            setCloud("ok", "Base de datos al día");
+          }
+          done();
+        }, (e) => { cloudLive = false; setCloud("bad", "Base de datos sin acceso"); toast(Cloud.friendly(e)); done(); });
+      });
+    });
+  }
+  $("#loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#loginMsg"), btn = $("#btnLogin");
+    btn.disabled = true; showMsg(msg, "");
+    try { await Cloud.signIn($("#loginEmail").value.trim(), $("#loginPass").value); $("#loginPass").value = ""; }
+    catch (err) { showMsg(msg, Cloud.friendly(err)); }
+    finally { btn.disabled = false; }
+  });
+  $("#btnReset").onclick = async () => {
+    const email = $("#loginEmail").value.trim(), msg = $("#loginMsg");
+    if (!email) return showMsg(msg, "Escribe tu correo y vuelve a tocar «Olvidé mi contraseña».");
+    try { await Cloud.resetPassword(email); showMsg(msg, "Te enviamos un correo para cambiar la contraseña.", true); }
+    catch (err) { showMsg(msg, Cloud.friendly(err)); }
+  };
+  $("#btnLogout").onclick = () => Cloud && Cloud.signOut();
+
   // Primer uso: localiza la dirección de la oficina y deja el registro listo para confirmar
   async function setupOffice() {
     showTab("registro");

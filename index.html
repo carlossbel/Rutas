@@ -27,10 +27,12 @@
       </div>
     </div>
     <div class="top-actions">
+      <span class="svc" id="cloudStatus" hidden></span>
       <span class="svc" id="svcStatus" title="Estado del servicio de rutas">Servicio de rutas</span>
       <button class="btn ghost sm" id="btnExport" type="button">Exportar</button>
       <label class="btn ghost sm" for="importFile">Importar</label>
       <input id="importFile" type="file" accept="application/json,.json" hidden>
+      <span class="user" id="userBox" hidden><span id="userEmail"></span><button class="btn ghost sm" id="btnLogout" type="button">Salir</button></span>
     </div>
   </header>
 
@@ -168,9 +170,27 @@
     </main>
   </div>
 
+  <div class="login" id="login" hidden>
+    <form class="login-card glass" id="loginForm" novalidate>
+      <div class="brand-name">Rutas</div>
+      <p class="fine">Inicia sesión con la cuenta que te asignaron.</p>
+      <label class="field" for="loginEmail">Correo
+        <input type="text" id="loginEmail" autocomplete="username" inputmode="email">
+      </label>
+      <label class="field" for="loginPass">Contraseña
+        <input type="password" id="loginPass" autocomplete="current-password">
+      </label>
+      <p class="msg" id="loginMsg" hidden></p>
+      <button class="btn primary wide" id="btnLogin" type="submit">Entrar</button>
+      <button class="link" id="btnReset" type="button">Olvidé mi contraseña</button>
+    </form>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="firebase-config.js"></script>
+  <script src="cloud.js"></script>
   <script src="solver.js"></script>
   <script src="app.js"></script>
 </body>
