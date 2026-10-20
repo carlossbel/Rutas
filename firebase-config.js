@@ -16,7 +16,14 @@
  *   appId: "1:1234567890:web:abc123"
  * };
  */
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCViNFYwo6mdNjPgBjte_8PrhKexprH5yk",
+  authDomain: "rutas-bloobit.firebaseapp.com",
+  projectId: "rutas-bloobit",
+  storageBucket: "rutas-bloobit.firebasestorage.app",
+  messagingSenderId: "304147874794",
+  appId: "1:304147874794:web:e07aff0d15a0555d702893"
+};
 
 // Colección de Firestore donde se guardan las empresas
 window.FIREBASE_COLLECTION = "empresas";
