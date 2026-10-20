@@ -52,8 +52,7 @@ Para que cualquiera que abra la página ya tenga la lista: exporta el JSON, ren�
 
 ## Primer uso
 
-1. Abre la página: como no hay oficina, entra directo a **Registrar**.
-2. Pega las coordenadas de la oficina (en Google Maps mantén presionado el lugar y copia los números), revisa el pin, marca **Esta es la oficina** y la casilla de confirmación → **Guardar**.
+1. La oficina (Puente de Alvarado 303, 20.5933, -100.3726) ya viene precargada. Para moverla: Empresas → Oficina Bloobit → Editar / verificar.
 3. Registra cada empresa igual.
 4. En **Ruta del día** marca a quién vas hoy → **Calcular mejor ruta**.
 

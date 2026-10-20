@@ -12,7 +12,7 @@
   const NOMINATIM = "https://nominatim.openstreetmap.org";
   const QRO_VIEWBOX = "-100.70,20.90,-100.10,20.35"; // prioriza resultados en la zona de Querétaro
   const LS_KEY = "rutas-bloobit-v1";
-  const OFFICE_DEFAULT = { name: "Oficina Bloobit", address: "C. del Puente de Alvarado 303, Carretas, 76050 Santiago de Querétaro, Qro." };
+  const OFFICE_DEFAULT = { id: "oficina-bloobit", name: "Oficina Bloobit", address: "C. del Puente de Alvarado 303, Carretas, 76050 Santiago de Querétaro, Qro.", lat: 20.5933, lng: -100.3726 };
 
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -590,7 +590,12 @@
     $("#returnOffice").checked = state.settings.ret !== false;
     renderAll(); fitAll();
     if (Cloud) await startCloud();
-    if (!office()) setupOffice();
+    if (!office()) {
+      // Oficina con coordenadas fijas: se agrega sola (y se sube a la base de datos si está conectada)
+      state.places.push({ id: OFFICE_DEFAULT.id, name: OFFICE_DEFAULT.name, address: OFFICE_DEFAULT.address, contact: "", phone: "", notes: "",
+        lat: OFFICE_DEFAULT.lat, lng: OFFICE_DEFAULT.lng, isOffice: true, verified: null, updated: new Date().toISOString() });
+      save(); renderAll(); fitAll();
+    }
     // Prueba rápida del servicio de rutas
     getJSON(OSRM + "/nearest/v1/driving/-100.3899,20.5888?number=1", 8000)
       .then((r) => setSvc(r.code === "Ok", r.code === "Ok" ? "Rutas en línea" : "Rutas con fallas"))

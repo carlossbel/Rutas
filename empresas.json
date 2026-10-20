@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "id": "oficina-bloobit",
+    "name": "Oficina Bloobit",
+    "address": "C. del Puente de Alvarado 303, Carretas, 76050 Santiago de Querétaro, Qro.",
+    "contact": "",
+    "phone": "",
+    "notes": "",
+    "lat": 20.5933,
+    "lng": -100.3726,
+    "isOffice": true,
+    "verified": null
+  }
+]
